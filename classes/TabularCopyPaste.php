@@ -22,17 +22,33 @@ class TabularData {
         $bHeaderDetected = false;
         foreach ($aRows as $iRowCnt => $sRow) {
             if (trim($sRow) == '') continue;
-            $aColumns = explode($sSeparator, $sRow);
+            $aRawColumns = explode($sSeparator, $sRow);
             if (!$bHeaderDetected) {
                 $this->aColumns = array();
-                foreach ($aColumns as $iIndex => $sColumnName) {
-                    $this->aColumns[$iIndex] = new TabularColumn($sColumnName);
+                foreach ($aRawColumns as $iRawIndex => $sRawColumnName) {
+                    $sRawColumnName = trim($sRawColumnName);
+                    // Check if column-name already exists
+                    $sComment = null;
+                    foreach ($this->aColumns as $iIndex => $oColumn) {
+                        /** @var $oColumn TabularColumn */
+                        if ($sRawColumnName == $oColumn->originalName) {
+                            $sRawColumnName = $sRawColumnName.'1';
+                            $sComment = 'Renamed because of duplicate column name at index '.$iIndex.'.';
+                        }
+                    }
+                    
+                    $this->aColumns[$iRawIndex] = new TabularColumn($sRawColumnName);
+                    $this->aColumns[$iRawIndex]->comment = $sComment;
                 }
                 $bHeaderDetected = true;
             } else {
                 // Normal row
-                $this->aData[] = $aColumns;
+                $this->aData[] = $aRawColumns;
             }
+        }
+
+        if (count($this->aData) == 0) {
+            throw new Exception('No data found!');
         }
 
         $this->_detectDatatypeColumns();
@@ -211,7 +227,7 @@ class TabularData {
         return $string;
     }
 
-    public function _getFriendlyColumnName($sColumnName, $psSubstituteChar = '_') {
+    static public function _getFriendlyColumnName($sColumnName, $psSubstituteChar = '_') {
         $sString = self::remove_accents($sColumnName);
         $sString = preg_replace('/[^_\-a-z0-9]+/i', $psSubstituteChar, trim($sString));
         $sString = trim($sString, $psSubstituteChar);
@@ -267,7 +283,7 @@ class TabularData {
                     //$aQueryColumn[] = "'".addslashes($aRow[$iColIndex])."'";
                     $aQueryColumn[] = "'".str_replace("'", "''", $aRow[$iColIndex])."'";
                 } else {
-                    $aQueryColumn[] = $aRow[$iColIndex];
+                    $aQueryColumn[] = ($aRow[$iColIndex]) ? $aRow[$iColIndex] : 'NULL';
                 }
              }
             $aOut[] = '('.implode(', ', $aQueryColumn).')'.$sSeperator;
@@ -294,6 +310,8 @@ class TabularData {
         $bIsDecimal = false;
         $bIsString = false;
         foreach ($paSampleData as $sSample) {
+
+
             
             // Do not sample empty values
             if (trim($sSample) == '') continue;
@@ -307,14 +325,14 @@ class TabularData {
             $bIsString = true;
         }
 
-        if (TRUE === $bIsInteger) {
+        if (TRUE === $bIsInteger && FALSE === $bIsString) {
             $poColumn->datatype = new TabularColumnDataTypeInteger();
-        } elseif (TRUE === $bIsDecimal) {
+        } elseif (TRUE === $bIsDecimal && FALSE === $bIsString) {
             $poColumn->datatype = new TabularColumnDataTypeDecimal();
         } elseif (TRUE === $bIsString) {
             $poColumn->datatype = new TabularColumnDataTypeString();
         } else {
-            throw new Exception('not implemented!');
+            throw new Exception('Datatype not implemented!');
         }
     }
 }
@@ -348,6 +366,11 @@ class TabularColumn {
     /**
      * @var string
      */
+    public $originalName;
+
+    /**
+     * @var string
+     */
     public $name;
 
     /**
@@ -355,8 +378,11 @@ class TabularColumn {
      */
     public $datatype;
 
+    public $comment;
+
     function __construct($name) {
-        $this->name = $name;
+        $this->originalName = $name;
+        $this->name = TabularData::_getFriendlyColumnName($name);
         $this->datatype = new TabularColumnDataTypeString();
     }
 }

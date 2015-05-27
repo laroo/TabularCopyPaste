@@ -33,19 +33,42 @@ require_once(__DIR__.'/../classes/TabularCopyPaste.php');
             $sData = $_POST['tabular_data'];
             $bHeaderIncluded = TRUE;
 
-            $oTabData = new TabularData();
-            $oTabData->loadByString($sData, $bHeaderIncluded);
+            try {
 
-            $sOutput = $oTabData->rendertoQuery(true);
+                $oTabData = new TabularData();
+                $oTabData->loadByString($sData, $bHeaderIncluded);
+
+                $sOutput = $oTabData->rendertoQuery(true);
+            } catch (Exception $oException) {
+                echo '<div class="alert alert-danger" role="alert">'.$oException->getMessage().'</div>';
+            }
 
             // DEBUG
             echo "<h3>Columns</h3>";
-            echo "<pre>";
+            echo '<table class="table table-bordered table-striped table-condensed">';
+            echo '<tr>';
+            echo '<th>Index</th>';
+            echo '<th>Original</th>';
+            echo '<th>Name</th>';
+            echo '<th>Datatype</th>';
+            echo '<th>Comment</th>';
+            echo '</tr>';
             foreach($oTabData->aColumns as $iIndex => $oColumn) {
                 /** @var $oColumn TabularColumn */
-                echo '* '.$oColumn->name.' = '.$oColumn->datatype->name.chr(10);
+                if ($oColumn->comment) {
+                    echo '<tr class="warning">';
+                } else {
+                    echo '<tr>';
+                }
+                
+                echo '<td>'.$iIndex.'</td>';
+                echo '<td>'.$oColumn->originalName.'</td>';
+                echo '<td>'.$oColumn->name.'</td>';
+                echo '<td>'.$oColumn->datatype->name.'</td>';
+                echo '<td>'.$oColumn->comment.'</td>';
+                echo '</tr>';
             }
-            echo "</pre>";
+            echo "</table>";
 
             echo "<h3>SQL PostgreSQL</h3>";
             if (isset($sOutput) && $sOutput <> '') {
