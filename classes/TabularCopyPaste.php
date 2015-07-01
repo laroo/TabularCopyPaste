@@ -1,22 +1,29 @@
 <?php
 
 class TabularData {
+
+    /**
+     * @var array
+     */
     public $aColumns = array();
+
+    /**
+     * @var array
+     */
     public $aData = array();
 
+    /**
+     * @param $sData
+     * @param bool $bHeaderIncluded
+     * @throws Exception
+     */
     public function loadByString($sData, $bHeaderIncluded = TRUE) {
-        $iNumNewLines = substr_count($sData, chr(10));
-        $iNumCarriageReturn = substr_count($sData, chr(13));
-        if ($iNumNewLines == $iNumCarriageReturn) {
-            $aRows = explode(chr(13).chr(10), $sData);
-        } elseif ($iNumNewLines > 0 && $iNumCarriageReturn == 0) {
-            $aRows = explode(chr(10), $sData);
-        } elseif ($iNumCarriageReturn > 0 && $iNumNewLines == 0) {
-            $aRows = explode(chr(13), $sData);
-        }
 
-        // Detect column seperator
-        $sSeparator = $this->_detectSeperator(array_slice($aRows, 1, 15));
+        // Detect newline
+        $aRows = explode($this->_detectNewlineCharacter($sData), $sData);
+
+        // Detect column separator by using first 15 rows
+        $sSeparator = $this->_detectColumnSeparator(array_slice($aRows, 1, 15));
 
         $this->aData = array();
         $bHeaderDetected = false;
@@ -51,7 +58,7 @@ class TabularData {
             throw new Exception('No data found!');
         }
 
-        $this->_detectDatatypeColumns();
+        $this->_detectDataTypeColumns();
 
     }
 
@@ -60,6 +67,7 @@ class TabularData {
      *
      * Source: http://stackoverflow.com/questions/3542818/remove-accents-without-using-iconv
      * @param string $str
+     * @return bool
      */
     protected static function detect_utf8($str)
     {
@@ -227,6 +235,11 @@ class TabularData {
         return $string;
     }
 
+    /**
+     * @param $sColumnName
+     * @param string $psSubstituteChar
+     * @return string
+     */
     static public function _getFriendlyColumnName($sColumnName, $psSubstituteChar = '_') {
         $sString = self::remove_accents($sColumnName);
         $sString = preg_replace('/[^_\-a-z0-9]+/i', $psSubstituteChar, trim($sString));
@@ -234,93 +247,75 @@ class TabularData {
         return strtolower($sString);
     }
 
-    public function rendertoQuery($bUseFriendlyColumnName = false) {
-        $sTableName = 'csv_to_query';
-        $aOut = array();
-        $aOut[] = 'DROP TABLE IF EXISTS "'.$sTableName.'";';
-        $aOut[] = 'CREATE TABLE "'.$sTableName.'"';
-        $aOut[] = "(";
-        $aOut[] = "\tid SERIAL NOT NULL,";
-        foreach($this->aColumns as $iIndex => $oColumn) {
-            /** @var $oColumn TabularColumn */
-            if ($iIndex+1 < count($this->aColumns)) {
-                $sSeperator = ',';
-            } else {
-                $sSeperator = '';
-            }
-            $sColumnName = ($bUseFriendlyColumnName) ? $this->_getFriendlyColumnName($oColumn->name) : $oColumn->name;
-            $aOut[] = "\t".'"'.$sColumnName.'"'." ".$oColumn->datatype->sqltype.$sSeperator;
+    /**
+     * Detect new line character
+     *
+     * @param $sData
+     * @return string
+     */
+    public function _detectNewlineCharacter($sData) {
+        $iNumNewLines = substr_count($sData, chr(10));
+        $iNumCarriageReturn = substr_count($sData, chr(13));
+        if ($iNumNewLines == $iNumCarriageReturn) {
+            return chr(13).chr(10); // Windows
+        } elseif ($iNumCarriageReturn > 0 && $iNumNewLines == 0) {
+            return chr(13); // Mac
         }
-        $aOut[] = ");";
-        $aOut[] = "";
-
-        $aOut[] = "INSERT INTO {$sTableName}";
-        $aOut[] = "(";
-        foreach($this->aColumns as $iIndex => $oColumn) {
-            /** @var $oColumn TabularColumn */
-            if ($iIndex+1 < count($this->aColumns)) {
-                $sSeperator = ',';
-            } else {
-                $sSeperator = '';
-            }
-            $sColumnName = ($bUseFriendlyColumnName) ? $this->_getFriendlyColumnName($oColumn->name) : $oColumn->name;
-
-            $aOut[] = "\t".'"'.$sColumnName.'"'.$sSeperator;
-        }
-        $aOut[] = ") VALUES ";
-        foreach($this->aData as $iRowIndex => $aRow) {
-            $aQueryColumn = array();
-            if ($iRowIndex+1 < count($this->aData)) {
-                $sSeperator = ',';
-            } else {
-                $sSeperator = ';';
-            }
-            foreach($this->aColumns as $iColIndex => $oColumn) {
-                if ($oColumn->datatype->bEscape) {
-                    // Needs escaping
-                    //$aQueryColumn[] = "'".pg_escape_string($aRow[$iColIndex])."'";
-                    //$aQueryColumn[] = "'".mysqli_real_escape_string($aRow[$iColIndex])."'";
-                    //$aQueryColumn[] = "'".addslashes($aRow[$iColIndex])."'";
-                    $aQueryColumn[] = "'".str_replace("'", "''", $aRow[$iColIndex])."'";
-                } else {
-                    $aQueryColumn[] = ($aRow[$iColIndex]) ? $aRow[$iColIndex] : 'NULL';
-                }
-             }
-            $aOut[] = '('.implode(', ', $aQueryColumn).')'.$sSeperator;
-        }
-
-        return implode(chr(10), $aOut);
+        return chr(10); // Unix
     }
 
-    public function _detectSeperator($aSampleRows) {
+    /**
+     * Detect column seperator
+     * 
+     * FIXME Not implemented
+     *
+     * @param $aSampleRows
+     * @return string
+     */
+    public function _detectColumnSeparator($aSampleRows) {
         return "\t";
     }
 
-    public function _detectDatatypeColumns() {
+    /**
+     * Detect data type columns
+     */
+    public function _detectDataTypeColumns() {
         $aSampleData = array_slice($this->aData, 0, 20);
         foreach($this->aColumns as $iIndex => $oColumn) {
             /** @var $oColumn TabularColumn */
-            $this->_detectDatatypeColumn_bySampleData($oColumn, array_column($aSampleData, $iIndex));
+            $this->_detectDataTypeColumn_bySampleData($oColumn, array_column($aSampleData, $iIndex));
         }
     }
 
-    public function _detectDatatypeColumn_bySampleData(TabularColumn $poColumn, array $paSampleData) {
+    /**
+     * @param TabularColumn $poColumn
+     * @param array $paSampleData
+     * @throws Exception
+     */
+    public function _detectDataTypeColumn_bySampleData(TabularColumn $poColumn, array $paSampleData) {
 
         $bIsInteger = false;
         $bIsDecimal = false;
         $bIsString = false;
+        $iSamples = count($paSampleData);
+        $iEmptyCount = 0;
         foreach ($paSampleData as $sSample) {
-
-
             
             // Do not sample empty values
-            if (trim($sSample) == '') continue;
+            if (trim($sSample) == '') {
+                $iEmptyCount++;
+                continue;
+            }
 
             $bIsInteger = (bool)preg_match('/^[0-9]+$/', $sSample);
-            if ($bIsInteger) continue;
+            if ($bIsInteger) {
+                continue;
+            }
 
             $bIsDecimal = (bool)preg_match('/^[0-9]+(\.[0-9]+)?$/', $sSample);
-            if ($bIsDecimal) continue;
+            if ($bIsDecimal) {
+                continue;
+            }
 
             $bIsString = true;
         }
@@ -331,9 +326,35 @@ class TabularData {
             $poColumn->datatype = new TabularColumnDataTypeDecimal();
         } elseif (TRUE === $bIsString) {
             $poColumn->datatype = new TabularColumnDataTypeString();
+        } elseif ($iSamples === $iEmptyCount) {
+            // Unable to sample any data, fallback to string
+            $poColumn->datatype = new TabularColumnDataTypeString();
         } else {
-            throw new Exception('Datatype not implemented!');
+            throw new Exception(sprintf('Datatype not implemented! [i:%b d:%b s:%b]', $bIsInteger, $bIsDecimal, $bIsString));
         }
+    }
+
+    public function getAvailableDataTypes() {
+        return array(
+            'string',
+            'integer',
+            'decimal',
+            'date',
+        );
+    }
+
+    public function getDataTypeObject_byName($psName) {
+        switch ($psName) {
+            case "string":
+                return new TabularColumnDataTypeString();
+            case "integer":
+                return new TabularColumnDataTypeInteger();
+            case "decimal":
+                return new TabularColumnDataTypeDecimal();
+            case "date":
+                return new TabularColumnDataTypeDate();
+        }
+        throw new Exception(sprintf('Unknown data type! [%s]', $psName));
     }
 }
 
@@ -341,24 +362,35 @@ abstract class TabularColumnDataType {
     public $name;
     public $sqltype;
     public $bEscape = true;
+    public $bNullOnEmpty = true;
 }
 
 class TabularColumnDataTypeString extends TabularColumnDataType {
     public $name = 'string';
     public $sqltype = 'VARCHAR';
     public $bEscape = true;
+    public $bNullOnEmpty = true;
 }
 
 class TabularColumnDataTypeInteger extends TabularColumnDataType {
     public $name = 'integer';
     public $sqltype = 'INTEGER';
     public $bEscape = false;
+    public $bNullOnEmpty = true;
 }
 
 class TabularColumnDataTypeDecimal extends TabularColumnDataType {
     public $name = 'decimal';
     public $sqltype = 'NUMERIC';
     public $bEscape = false;
+    public $bNullOnEmpty = true;
+}
+
+class TabularColumnDataTypeDate extends TabularColumnDataType {
+    public $name = 'date';
+    public $sqltype = 'DATE';
+    public $bEscape = false;
+    public $bNullOnEmpty = true;
 }
 
 class TabularColumn {
@@ -378,6 +410,9 @@ class TabularColumn {
      */
     public $datatype;
 
+    /**
+     * @var string
+     */
     public $comment;
 
     function __construct($name) {
@@ -385,4 +420,87 @@ class TabularColumn {
         $this->name = TabularData::_getFriendlyColumnName($name);
         $this->datatype = new TabularColumnDataTypeString();
     }
+}
+
+abstract class TabularRenderer {
+
+    /**
+     * @param TabularData $poTabularData
+     * @return mixed
+     */
+    abstract public function render(TabularData $poTabularData);
+
+}
+
+class TabularRendererPostgresql extends TabularRenderer {
+
+    /**
+     * @param TabularData $poTabularData
+     * @return string
+     */
+    public function render(TabularData $poTabularData) {
+
+        $bUseFriendlyColumnName = true;
+
+        $sTableName = 'csv_to_query';
+        $aOut = array();
+        $aOut[] = 'DROP TABLE IF EXISTS "'.$sTableName.'";';
+        $aOut[] = 'CREATE TABLE "'.$sTableName.'"';
+        $aOut[] = "(";
+        $aOut[] = "\tid SERIAL NOT NULL,";
+        foreach($poTabularData->aColumns as $iIndex => $oColumn) {
+            /** @var $oColumn TabularColumn */
+            if ($iIndex+1 < count($poTabularData->aColumns)) {
+                $sSeparator = ',';
+            } else {
+                $sSeparator = '';
+            }
+            $sColumnName = ($bUseFriendlyColumnName) ? $poTabularData->_getFriendlyColumnName($oColumn->name) : $oColumn->name;
+            $aOut[] = "\t".'"'.$sColumnName.'"'." ".$oColumn->datatype->sqltype.$sSeparator;
+        }
+        $aOut[] = ");";
+        $aOut[] = "";
+
+        $aOut[] = "INSERT INTO {$sTableName}";
+        $aOut[] = "(";
+        foreach($poTabularData->aColumns as $iIndex => $oColumn) {
+            /** @var $oColumn TabularColumn */
+            if ($iIndex+1 < count($poTabularData->aColumns)) {
+                $sSeparator = ',';
+            } else {
+                $sSeparator = '';
+            }
+            $sColumnName = ($bUseFriendlyColumnName) ? $poTabularData->_getFriendlyColumnName($oColumn->name) : $oColumn->name;
+
+            $aOut[] = "\t".'"'.$sColumnName.'"'.$sSeparator;
+        }
+        $aOut[] = ") VALUES ";
+        foreach($poTabularData->aData as $iRowIndex => $aRow) {
+            $aQueryColumn = array();
+            if ($iRowIndex+1 < count($poTabularData->aData)) {
+                $sSeparator = ',';
+            } else {
+                $sSeparator = ';';
+            }
+            foreach($poTabularData->aColumns as $iColIndex => $oColumn) {
+                if (isset($aRow[$iColIndex])) continue;
+
+                if ($oColumn->datatype->bNullOnEmpty && trim($aRow[$iColIndex]) == '') {
+                    $aQueryColumn[] = 'NULL';
+                } elseif ($oColumn->datatype->bEscape) {
+                    // Needs escaping
+                    //$aQueryColumn[] = "'".pg_escape_string($aRow[$iColIndex])."'";
+                    //$aQueryColumn[] = "'".mysqli_real_escape_string($aRow[$iColIndex])."'";
+                    //$aQueryColumn[] = "'".addslashes($aRow[$iColIndex])."'";
+                    $aQueryColumn[] = "'".str_replace("'", "''", $aRow[$iColIndex])."'";
+                } else {
+                    $aQueryColumn[] = ($aRow[$iColIndex]) ? $aRow[$iColIndex] : 'NULL';
+                }
+            }
+            $aOut[] = '('.implode(', ', $aQueryColumn).')'.$sSeparator;
+        }
+
+        return implode(chr(10), $aOut);
+    }
+
 }
