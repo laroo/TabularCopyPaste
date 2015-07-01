@@ -2,6 +2,10 @@
 
 header('Content-Type: text/html; charset=utf-8');
 
+ini_set('display_errors',1); 
+error_reporting(-1);
+
+require_once(__DIR__.'/../classes/compatibility.php');
 require_once(__DIR__.'/../classes/TabularCopyPaste.php');
 
 function renderDropDown($psName, array $paArray, $psSelected)
