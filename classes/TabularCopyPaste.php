@@ -483,7 +483,10 @@ class TabularRendererPostgresql extends TabularRenderer {
                 $sSeparator = ';';
             }
             foreach($poTabularData->aColumns as $iColIndex => $oColumn) {
-                if (isset($aRow[$iColIndex])) continue;
+                if (!isset($aRow[$iColIndex])) {
+                    // Set at least empty
+                    $aRow[$iColIndex] = '';
+                }
 
                 if ($oColumn->datatype->bNullOnEmpty && trim($aRow[$iColIndex]) == '') {
                     $aQueryColumn[] = 'NULL';
