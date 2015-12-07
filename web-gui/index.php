@@ -155,8 +155,10 @@ if (isset($_POST['tabular_data'])) {
                 <h3>SQL PostgreSQL</h3>
                 <?php
 
-                $oRenderer = new TabularRendererPostgresql;
-                $sOutput = $oRenderer->render($oTabData);
+		if (isset($oTabData)) {
+	                $oRenderer = new TabularRendererPostgresql;
+                	$sOutput = $oRenderer->render($oTabData);
+		}
 
                 if (isset($sOutput) && $sOutput <> '') {
                     echo '<pre>'.$sOutput.'</pre>';
