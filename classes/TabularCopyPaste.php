@@ -264,6 +264,27 @@ class TabularData {
         return chr(10); // Unix
     }
 
+    function _math_standard_deviation($x) {
+        $summation = 0;
+        $values = 0;
+        foreach ($x as $value) {
+            if (is_numeric($value)) {
+                $summation = $summation + $value;
+                $values++;
+            }
+        }
+        $mean = $summation/$values;
+        $ex2 = 0;
+        foreach ($x as $value) {
+            if (is_numeric($value)) {
+                $ex2 = $ex2 + ($value*$value);
+            }
+        }
+        $rawsd = ($ex2/$values) - ($mean * $mean);
+        $sd = sqrt($rawsd);
+        return $sd;
+    }
+
     /**
      * Detect column seperator
      * 
@@ -273,7 +294,46 @@ class TabularData {
      * @return string
      */
     public function _detectColumnSeparator($aSampleRows) {
-        return "\t";
+
+        $aChars = array(
+            'tab' => chr(10),
+            'g' => 'g',
+            'comma' => ',',
+            'o' => 'o',
+        );
+
+        $aCnt = array();
+        foreach ($aChars as $sCharName => $sChar) {
+            $aCnt[$sCharName] = array();
+        }
+
+        foreach ($aSampleRows as $sRow) {
+            foreach ($aChars as $sCharName => $sChar) {
+                $iCnt = substr_count($sRow, $sChar);
+                if ($iCnt == 0) $iCnt = null;
+                $aCnt[$sCharName][] = $iCnt;
+            }
+        }
+
+        $aTop = array();
+        foreach ($aChars as $sCharName => $sChar) {
+            if (array_sum($aCnt[$sCharName]) == 0) {
+                continue;
+            }
+            $fStdDev = $this->_math_standard_deviation($aCnt[$sCharName]);
+            // No difference is 0. Take the char with the least deviation
+            $aTop[$sCharName] = $fStdDev;
+        }
+
+        if (count($aTop) == 0) {
+            return "\t"; // Fallback
+        }
+
+        asort($aTop);
+
+        reset($aTop);
+        $sWinner = key($aTop);
+        return $aChars[$sWinner];
     }
 
     /**
@@ -434,6 +494,12 @@ abstract class TabularRenderer {
 
 class TabularRendererPostgresql extends TabularRenderer {
 
+    protected $sTableName = 'csv_to_query';
+
+    public function setTableName($sTableName) {
+        $this->sTableName = $sTableName;
+    }
+
     /**
      * @param TabularData $poTabularData
      * @return string
@@ -442,10 +508,9 @@ class TabularRendererPostgresql extends TabularRenderer {
 
         $bUseFriendlyColumnName = true;
 
-        $sTableName = 'csv_to_query';
         $aOut = array();
-        $aOut[] = 'DROP TABLE IF EXISTS "'.$sTableName.'";';
-        $aOut[] = 'CREATE TABLE "'.$sTableName.'"';
+        $aOut[] = 'DROP TABLE IF EXISTS "'.$this->sTableName.'";';
+        $aOut[] = 'CREATE TABLE "'.$this->sTableName.'"';
         $aOut[] = "(";
         $aOut[] = "\tid SERIAL NOT NULL,";
         foreach($poTabularData->aColumns as $iIndex => $oColumn) {
@@ -461,7 +526,7 @@ class TabularRendererPostgresql extends TabularRenderer {
         $aOut[] = ");";
         $aOut[] = "";
 
-        $aOut[] = "INSERT INTO {$sTableName}";
+        $aOut[] = 'INSERT INTO "'.$this->sTableName.'"';
         $aOut[] = "(";
         foreach($poTabularData->aColumns as $iIndex => $oColumn) {
             /** @var $oColumn TabularColumn */
