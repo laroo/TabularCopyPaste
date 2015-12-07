@@ -107,6 +107,7 @@ if (isset($_POST['tabular_data'])) {
                 <div class="form-group">
                     <label for="tabularDataInput">Tabular data</label>
                     <textarea name="tabular_data" class="form-control" id="tabularDataInput" placeholder="Paste tabular data here" rows="16"><?php if (isset($_POST['tabular_data'])) echo $_POST['tabular_data'];?></textarea>
+                    <p>? Lines / ? Characters</p>
                 </div>
                 <button type="submit" class="btn btn-default">Submit</button>
             </div>
