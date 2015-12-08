@@ -297,9 +297,9 @@ class TabularData {
 
         $aChars = array(
             'tab' => chr(10),
-            'g' => 'g',
             'comma' => ',',
-            'o' => 'o',
+            'semicolon' => ';',
+            'space' => ' ',
         );
 
         $aCnt = array();
